@@ -1,0 +1,108 @@
+---
+title: "Homework 1"
+author: "Davit Kajaia"
+date: '23 April 2020 Year'
+output: html_document
+---
+---
+---
+
+# Homework 1
+
+## Libraries
+
+```{r message=FALSE}
+library(tidyverse) 
+library(sf)
+library(maptools) 
+library(ggthemes) 
+library(spatstat) 
+library(ggspatial)
+library(classInt)
+library(knitr)
+library(readxl)
+```
+
+## Loading and tidying data
+```{r}
+setwd("C:/Users/User/Documents/OneDrive/Desktop/R/spatial")
+```
+```{r eval=FALSE}
+ge_admin_url <- "https://data.humdata.org/dataset/3ee95199-2dfe-40fc-b9bd-b44cc8c91024/resource/ac2b2747-18a2-43c9-abbb-4ab2c5c539a3/download/geo_adm_geostat_20191018_shp.zip"
+download.file(ge_admin_url, destfile="ge_admin.zip")
+unzip("ge_admin.zip")
+file.remove("ge_admin.zip")
+```
+```{r}
+ge_adm_0 <- st_read("geo_admbnda_adm0_geostat_20191018.shp")
+ge_adm_1 <- st_read("geo_admbnda_adm1_geostat_20191018.shp")
+ge_adm_2 <- st_read("geo_admbnda_adm2_geostat_20191018.shp")
+
+
+ge_pop<-read_xlsx("geo_admpop.xlsx",sheet=3)
+
+ge_pop_2 <- ge_pop%>% 
+  select(ADM2_PCODE, POP_Total,F_Total,M_Total)
+
+ge_adm_2_ii <- ge_adm_2 %>% 
+  select(ADM2_PCODE, ADM2_EN)
+
+ge_adm_2_pop <- left_join(ge_adm_2_ii, ge_pop_2, by="ADM2_PCODE")
+
+```
+
+## Adding data for Tbilisi
+
+```{r}
+ge_adm_1_TBI <- ge_adm_1 %>% 
+  select(ADM1_PCODE, ADM1_EN) %>% 
+  rename(ADM_PCODE = ADM1_PCODE,
+         ADM_EN = ADM1_EN) %>% 
+  filter(ADM_EN == "Tbilisi")
+ge_adm_1_TBI <- ge_adm_1_TBI %>% 
+  mutate(F_Total=634743,M_Total=536357,POP_Total=sum(634743,536357))
+
+ge_adm_2_pop <- ge_adm_2_pop %>% 
+  rename(ADM_PCODE = ADM2_PCODE,
+         ADM_EN = ADM2_EN)
+ge_adm_2_pop <- rbind(ge_adm_2_pop, ge_adm_1_TBI)
+
+```
+
+## Calculating gender share
+
+```{r}
+ge_adm_2_pop<-ge_adm_2_pop %>% mutate(Share= F_Total / POP_Total)
+
+```
+
+## Plotting
+
+```{r}
+ggplot()+
+  theme_minimal(base_size=8.5)+
+  theme(axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        plot.title = element_text(size = 13,face="bold",hjust=0.5))+
+  geom_sf(data = ge_adm_0, fill = "grey", colour = "grey60", size = 0.1)+
+  geom_sf(data = ge_adm_2_pop, aes(fill = Share*100),colour = "grey60", size= 0.1)+
+scale_fill_gradientn(colors=c("#004648","#E6E2BC","red")) +
+  labs(title = "Gender Balance in Georgia",
+       fill  = "Share of female \npopulation,%",
+       caption = "data: The Humanitarian Data Exchange \nvisual: D.Kajaia")+
+  annotation_scale(location = "bl", style = "ticks") +
+  annotation_north_arrow(location = "tr", width = unit(0.5, "cm"))
+ggsave("Gender_balance_in_Georgia.png", dpi = 600, height = 4, width = 7, units = "in")
+```
+
+
+## conclusion
+
+```{r}
+ge_adm_2_pop %>% summarize(sd=sd(Share),mean=mean(Share))
+```
+
+From the map we can see that the sex ration is not equal - it is more female-biased. Main reason for that can be that females live longer than males. 
+
+As we can see there is some difference in gender share between districts, but Standard deviation of gender share is very small - only 1 %, therefore mostly these differences are uxplainable.  It seems that female share is higher in some cities with higher population (for example in Tbilisi). This may be the case due to selective abortion. Selective abortion should be lower in big cities because people in big cities should be more educated.
+

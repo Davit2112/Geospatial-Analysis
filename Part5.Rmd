@@ -1,0 +1,106 @@
+---
+title: "Homework 5"
+author: "Davit Kajaia"
+date: "5/12/2020"
+output: html_document
+---
+
+
+
+
+# Homework 5
+
+## Libraries
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(lubridate)
+library(ggthemes)
+library(scico)
+library(ggmap)
+library(data.table)
+library(sf)
+library(knitr)
+library(ggspatial)
+library(dplyr)
+```
+
+## Importing GPS data
+
+```{r}
+setwd("C:/Users/User/Documents/OneDrive/Desktop/R/spatial")
+```
+```{r eval=FALSE}
+url <-  "http://aasa.ut.ee/Rspatial/data/usa_GPS.zip"
+download.file(url, "usa_GPS.zip")
+unzip("usa_GPS.zip")
+file.remove("usa_GPS.zip")
+```
+```{r}
+gpsData <- read.csv2("gps_us.csv")
+```
+
+## Cleaning data
+
+```{r echo=FALSE, warning=FALSE}
+glimpse(gpsData)
+gpsData <- gpsData %>% 
+  dplyr::select(time_system_ts, accuracy, altitude, bearing, speed, X, Y)
+
+gpsData %>% 
+  head() 
+
+gpsData2 <- gpsData %>% 
+  mutate(time_system_ts = ymd_hms(time_system_ts))%>%
+  mutate(time_system_ts = time_system_ts - hours(10))%>% 
+  filter(as.Date(time_system_ts) == as.Date("2018-04-27"))
+```
+
+## Importing base map
+
+```{r message=FALSE, warning=FALSE}
+box <- c(left = min(gpsData2$X)-0.2, bottom = min(gpsData2$Y)-0.2, right = max(gpsData2$X)+0.2, top = max(gpsData2$Y)+0.2)
+
+Ca_map <- get_stamenmap(box, maptype = "terrain", zoom = 9)
+```
+
+## Plot of movement path
+
+```{r}
+ggmap(Ca_map)+
+  theme_classic()+
+  theme(axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        plot.title = element_text(size = 13,face="bold"))+
+  geom_point(data = gpsData2, aes(y = Y, x=X), colour ="red", size=0.6, alpha=0.5)+
+  labs(title ="Movement path on 2018-04-27")+
+  annotation_north_arrow(location = "tr", width = unit(0.5, "cm"))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

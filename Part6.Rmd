@@ -1,0 +1,54 @@
+---
+title: "Homework 6"
+author: "Davit Kajaia"
+date: "5/12/2020"
+output: html_document
+---
+
+# Homework 6
+
+## Libraries
+
+```{r message=FALSE}
+library(readxl)
+library(curl)
+library(sf)
+library(dplyr)
+library(tmap)
+library(knitr)
+```
+
+## Importing data
+
+```{r eval=FALSE}
+link<-"http://aasa.ut.ee/tbilisi/data/tripadvisor.xlsx"
+curl_download(link,destfile="data.xlsx")
+```
+```{r}
+data<-read_xlsx("data.xlsx")
+```
+
+## Tidying data
+
+```{r}
+glimpse(data)
+data$lon<-as.numeric(data$lon)
+data$lat<-as.numeric(data$lat)
+data2<-data%>%filter(!is.na(lat))%>%filter(!is.na(lon))
+dim(data)==dim(data2)
+```
+
+## Converting to sf
+
+```{r}
+data_sf<-st_as_sf(data2, coords = c("lon", "lat"), crs = 4326)
+glimpse(data_sf)
+```
+
+## Map of restaurants in Tbilisi
+
+```{r}
+tmap_mode("view")
+tm_shape(data_sf)+ 
+  tm_dots(size = "reviews", col = "red", alpha = 0.5, scale = 1, border.col="black", sizes.legend=c(0.5,2))
+```

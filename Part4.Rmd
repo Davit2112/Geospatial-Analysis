@@ -1,0 +1,130 @@
+---
+title: "Homework 4"
+author: "Davit Kajaia"
+date: "5/11/2020"
+output: html_document
+---
+
+
+
+
+# Homework 4
+
+## Libraries
+
+```{r message=FALSE}
+library(tidyverse)
+library(sf)
+library(tmap)
+library(tmaptools)
+library(lubridate)
+library(ggthemes)
+library(ggspatial)
+library(raster)
+library(rnaturalearth)
+library(rgeos)
+library(maptools)
+library(ggplot2)
+library(GISTools)
+library(maps)
+```
+
+
+## Importing data
+
+```{r}
+setwd("C:/Users/User/Documents/OneDrive/Desktop/R/spatial")
+```
+```{r}
+prec <- raster::getData('worldclim', var ='bio', res = 0.5, lon = 42, lat = 44)
+gadm_0 <- raster::getData('GADM', country = 'GEO', level = 0)
+gadm_0_sf <- st_as_sf(gadm_0)
+prec2 <- mask(prec$bio12_17, gadm_0)
+roads  <- ne_download(scale = "large", type = "roads", category = "cultural")
+roads_ge <- gIntersection(roads, gadm_0, byid = TRUE, drop_lower_td = TRUE)
+```
+```{r eval=FALSE}
+download.file("http://aasa.ut.ee/tbilisi/osm_georgia_selected.zip", destfile="osm_georgia_selected.zip")
+unzip("osm_georgia_selected.zip")
+file.remove("osm_georgia_selected.zip")
+```
+```{r}
+rivers <-  st_read("gis_osm_waterways_free_1.shp")
+rivers_2 <- rivers %>% filter(fclass == "river")
+rivers_2 <- st_intersection(rivers_2, gadm_0_sf)
+
+populated_places <- ne_download(scale = "large", type = "populated_places", category = "cultural")
+populated_places_sf <- st_as_sf(populated_places)
+populated_places_sf <- populated_places_sf %>% filter(ISO_A2 =="GE")
+```      
+
+
+## Annual Precipitation in Georgia
+
+```{r message=TRUE, warning=FALSE}
+
+plot(gadm_0)
+plot(prec2, add= T, col = rainbow(20))
+plot(rivers_2, add=T,  col="lightblue", lwd = 0.25)
+plot(roads_ge, add = T, col = "red", lwd = 0.1)
+plot(populated_places_sf, col = "black", add = T)
+pointLabel(st_coordinates(populated_places_sf),labels = populated_places_sf$NAME,cex=1)
+north.arrow(xb=45.75, yb=43.2, len=0.05, lab="N")
+maps::map.scale(x=41.5, y=41.15, relwidth = 0.15,ratio=FALSE, cex=0.9)
+title(main ="Annual Precipitation in Georgia", font.main= 1)
+
+```
+
+
+## Annual Precipitation in Georgia with ggplot2
+
+```{r}
+re<-as.data.frame(prec2,xy=TRUE,na.rm=TRUE)
+str(re)
+re <- st_as_sf(re, coords = c("x", "y"), crs = 4326)
+roads2<-st_as_sf(roads_ge)
+```
+
+
+```{r}
+ggplot()+
+  theme_grey(base_size=8.5)+
+  theme(axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        plot.title = element_text(size = 13,face="bold"))+
+  geom_sf(data = re, aes(color=bio12_17))+
+  geom_sf(data=roads2,color="red",size=0.1)+
+  geom_sf(data=rivers_2,color="lightblue")+
+  geom_sf_label(populated_places_sf,mapping=aes(label=NAME),alpha = 0.6,
+                size= 3,expand=TRUE,label.size=0.1)+
+  scale_color_gradientn(colours = rainbow(16))+
+  labs(color = "mm",
+       title = "Annual Precipitation in Georgia",
+       caption = "Author: D. Kajaia")+
+  annotation_scale(location = "bl", style = "ticks") +
+  annotation_north_arrow(location = "tr", width = unit(0.5, "cm"))
+
+```
+
+
+
+## Average annual precipitation in Georgian regions
+
+```{r}
+gadm_1_sp <- raster::getData('GADM', country = 'GEO', level = 1)
+region_Ave_prec <- raster::extract(prec2, gadm_1_sp, fun = mean, na.rm=TRUE, sp = T)
+region_Ave_prec_sf <- st_as_sf(region_Ave_prec)
+head(region_Ave_prec_sf)
+```
+
+```{r}
+ggplot()+
+geom_sf(data = region_Ave_prec_sf, aes(fill = bio12_17), col = "grey", size= 0.25)+
+geom_sf_label(data = region_Ave_prec_sf, aes(label= round(bio12_17, 0)), alpha = 0.5)+
+scale_fill_gradientn(colours = c("#B0B579","#383b23"))+
+labs(title = "Average annual precipitation in Georgian regions", fill = "mm")
+
+```
+
+
+

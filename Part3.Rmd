@@ -1,0 +1,209 @@
+---
+title: "Homework 3"
+author: "Davit Kajaia"
+date: '26 April 2020 Year '
+output: html_document
+---
+
+
+# Homework 3
+
+## Libraries
+
+```{r message=FALSE}
+library(stringr)
+library(lubridate)
+library(rnaturalearth)
+library(tidyverse) 
+library(sf)
+library(ggspatial)
+library(classInt)
+library(knitr)
+library(readxl)
+library(units)
+```
+
+## Importing data
+
+```{r}
+setwd("C:/Users/User/Documents/OneDrive/Desktop/R/spatial")
+```
+```{r}
+dt<-read.csv("https://github.com/CSSEGISandData/COVID-19/raw/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_recovered_global.csv")
+
+countries50 <- ne_download(scale = 50, type = 'countries', category = 'cultural', returnclass = "sf")
+```
+
+## Cleaning data
+
+```{r}
+
+recovered <- gather(dt, "key", "value", 5:ncol(dt))
+recovered$key<-str_replace_all(recovered$key,'X',"")
+recovered<-recovered %>% mutate(place=paste0(Country.Region, ", ", Province.State),date=mdy(key))
+recovered$place<-gsub(", $", "",recovered$place)
+
+
+recovered_sf <- st_as_sf(recovered, coords = c("Long", "Lat"), crs = 4326)
+
+```
+
+```{r}
+recovered_sf_latest <- recovered_sf %>% 
+  filter(date == max(date)-days(1) | date == max(date)- days(8)) 
+recovered_crd_latest <- st_coordinates(recovered_sf_latest) %>% 
+  as_tibble()
+  
+recovered_sf_latest_2 <- bind_cols(recovered_sf_latest, recovered_crd_latest)
+
+recovered_sf_latest_2 <- recovered_sf_latest_2 %>% 
+  filter(X != 0) %>% 
+  filter(Y != 0)
+recovered_sf_latest_3 <- recovered_sf_latest_2 %>% 
+  select(place, X, Y, value, date) %>% 
+  st_drop_geometry() %>% 
+  spread(date, value)
+
+dates <- colnames(recovered_sf_latest_3)[4:5]
+colnames(recovered_sf_latest_3)[4:5] <- c("a", "b")
+recovered_sf_latest_3$a[is.na(recovered_sf_latest_3$a)] <- 0
+recovered_sf_latest_3$b[is.na(recovered_sf_latest_3$b)] <- 0
+
+recovered_sf_latest_3 <- recovered_sf_latest_3 %>%
+  mutate(change = b - a)
+```
+
+## Plotting
+
+```{r}
+ggplot()+
+  theme_grey(base_size=8.5)+
+  theme(axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        plot.title = element_text(size = 13,face="bold"))+
+  geom_sf(data = countries50, colour = "grey", fill= "white", size=0.2)+
+  geom_point(data = recovered_sf_latest_3, aes(x = X,
+                                               y = Y,
+                                               size = change,
+                                              colour = change, 
+                                           alpha= change))+
+  scale_alpha(range = c(0.1, 1))+
+  scale_colour_gradientn(colours= c("red1", "red4"))+
+  scale_size_continuous(range = c(1, 5))+
+  labs(size= "Recovered cases", alpha = "Recovered cases", colour = "Recovered cases",
+       title = "Recovered from COVID-19 during the last week")+
+  guides(alpha = F,
+         size= F)
+  
+```
+
+```{r}
+recovered_sf_latest_3_change_top10 <- recovered_sf_latest_3 %>% 
+  arrange(-change) %>% 
+  head(n = 10)
+
+ggplot()+
+  theme_grey(base_size=8.5)+
+  theme(axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        plot.title = element_text(size = 13,face="bold"),
+        plot.subtitle = element_text(size=10))+
+  geom_sf(data = countries50, fill = "white", colour = "grey", size=0.2)+
+  geom_point(data = recovered_sf_latest_3_change_top10, aes(x = X,
+                                               y = Y,
+                                               size = change,
+                                              alpha = change), colour = "blue")+
+  scale_size_continuous( range = c(1,6))+
+  scale_alpha(range = c(0.3, 0.9))+
+  labs(title="Recovered from COVID-19 during the last week",subtitle = "(Top 10 countries)", size= "Recovered cases", alpha = "Recovered cases", colour = "Recovered cases")
+
+```
+
+```{r}
+ggplot()+
+  theme_minimal(base_size=8.5)+
+  theme(plot.title = element_text(size = 13,face="bold"),
+                plot.subtitle = element_text(size=10))+
+  geom_segment(data = recovered_sf_latest_3_change_top10, aes(x= 0, 
+                                                              xend = change, 
+                                                              y = reorder(place, change), 
+                                                              yend = reorder(place, change)),
+               colour = "black")+
+  geom_point(data = recovered_sf_latest_3_change_top10, aes(x = change, y = reorder(place, change)),
+             shape = 21, colour = "white", fill = "firebrick", size= 3)+
+  labs(title="Recovered from COVID-19 during the last week",subtitle = "(Top 10 countries)", 
+       x = "Recovered cases",
+       y = "Country")
+```
+
+
+
+From graphs we can see that number of recovered cases vary significantly (from 0 to 40000). Europe and North America have most recovered cases, but it would be more meaningful if we examine recovered cases per capita or per cases. The fact that, for example, Spain and US have the most recovered cases does not means that these countries outperform other countries.
+
+
+
+## Population density map for Georgia using classes
+
+
+```{r}
+ge_adm_0 <- st_read("geo_admbnda_adm0_geostat_20191018.shp")
+ge_adm_1 <- st_read("geo_admbnda_adm1_geostat_20191018.shp")
+ge_adm_2 <- st_read("geo_admbnda_adm2_geostat_20191018.shp")
+
+
+ge_pop<-read_xlsx("geo_admpop.xlsx",sheet=3)
+```
+
+```{r}
+ge_pop_2 <- ge_pop%>% 
+  select(ADM2_PCODE, POP_Total)
+
+ge_adm_2_ii <- ge_adm_2 %>% 
+  select(ADM2_PCODE, ADM2_EN)
+
+ge_adm_2_pop <- left_join(ge_adm_2_ii, ge_pop_2, by="ADM2_PCODE")
+ge_adm_1_TBI <- ge_adm_1 %>% 
+  select(ADM1_PCODE, ADM1_EN) %>% 
+  rename(ADM_PCODE = ADM1_PCODE,
+         ADM_EN = ADM1_EN) %>% 
+  filter(ADM_EN == "Tbilisi")
+ge_adm_1_TBI <- ge_adm_1_TBI %>% 
+  mutate(POP_Total=1171100)
+ge_adm_2_pop <- ge_adm_2_pop %>% 
+  rename(ADM_PCODE = ADM2_PCODE,
+         ADM_EN = ADM2_EN)
+ge_adm_2_pop <- rbind(ge_adm_2_pop, ge_adm_1_TBI)
+```
+
+```{r}
+ge_adm_2_pop$area <- st_area(ge_adm_2_pop)
+ge_adm_2_pop$area <- set_units(ge_adm_2_pop$area, km^2)
+```
+```{r}
+ge_adm_2_pop <- ge_adm_2_pop %>% 
+  mutate(pop_dens =as.numeric( POP_Total / area))
+classes <- classIntervals(ge_adm_2_pop$pop_dens, n = 10, style = "quantile", dig.lab=4)
+ge_adm_2_pop <- ge_adm_2_pop %>%
+  mutate(percent_class = cut(pop_dens, classes$brks, include.lowest = T, dig.lab = 4))
+
+```
+
+```{r}
+
+ggplot()+
+  theme_minimal(base_size=8.5)+
+  theme(axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        plot.title = element_text(size = 13,face="bold"))+
+  geom_sf(data = ge_adm_0, fill = "grey40", colour = "grey60", size = 0.2)+
+  geom_sf(data = ge_adm_2_pop, aes(fill = percent_class), colour = "grey60", size= 0.2)+
+scale_fill_brewer(type=seq,palette="RdBu",direction=-1) +
+  labs(title = "Population Density in Georgia",
+       fill  = "Population/Km2",
+        caption = "data: The Humanitarian Data Exchange \nvisual: D.Kajaia")+
+  annotation_scale(location = "bl", style = "ticks") +
+  annotation_north_arrow(location = "tr", width = unit(0.5, "cm"))
+```
+
+
+I think population density distribution in Georgia depends on some life conditions. For example, we can see that density is the lowest in the northern regions of Georgia where landscape is hilly and density is the highest in big cities where GDP per capita is very high relative to other regions.

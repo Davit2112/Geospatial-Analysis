@@ -1,0 +1,145 @@
+---
+title: "Homework 2"
+author: "Davit Kajaia"
+date: '25 April 2020 Year '
+output: html_document
+---
+
+
+
+
+# Homework 2
+
+## Libraries
+
+```{r message=FALSE}
+library(tidyverse)
+library(readxl)
+library(knitr)
+library(curl)
+library(sf)
+library(ggspatial)
+```
+
+## Importing data
+
+```{r}
+setwd("C:/Users/User/Documents/OneDrive/Desktop/R/spatial")
+url <- "http://aasa.ut.ee/Rspatial/data/FarmedAnimalsByLocation_31102018.xlsx"
+destfile <- "FarmedAnimalsByLocation_31102018.xlsx"
+curl_download(url, destfile)
+agrAnimal <- read_excel(destfile)
+```
+
+```{r eval=FALSE}
+download.file("https://geoportaal.maaamet.ee/docs/haldus_asustus/omavalitsus_shp.zip", destfile="omavalitsus_shp.zip")
+unzip("omavalitsus_shp.zip")
+file.remove("omavalitsus_shp.zip")
+```
+```{r}
+list.files(pattern = ".shp")
+municip <-  st_read("omavalitsus_20200504.shp") 
+```
+
+## Cleaning data
+
+```{r}
+
+agrAnimal$county <- NULL
+agrAnimal$`admin unit` <- NULL
+agrAnimal <- agrAnimal %>% rename(action_place = `action place`,
+                                  estonian_holstein_cattle = `estonian holstein cattle`,
+                                  estonian_red_cattle = `estonian red cattle`,
+                                  estonian_native_cattle = `estonian native cattle`, 
+                                  beef_cattle = `beef cattle`, 
+                                  y = `X koordinaat`,
+                                  x = `Y koordinaat`)
+agrAnimal <- agrAnimal %>% mutate(x = as.numeric(x), y = as.numeric(y))
+
+```
+
+```{r}
+agrAnimal_2 <- gather(agrAnimal, "key", "value", 2:8)
+agrAnimal_2 <- agrAnimal_2 %>% filter(value > 0)
+
+agrAnimal_2 <- agrAnimal_2 %>% 
+  mutate(municip_key = str_to_lower(municipality))
+
+municip <- municip %>% 
+  mutate(municip_key = str_to_lower(ONIMI))
+
+```
+
+## Spatial join
+
+```{r}
+agrAnimal_2_sf <- st_as_sf(agrAnimal_2, coords = c("x", "y"), crs = 3301)
+agrAnimal_2_sf_municip <- st_join(st_transform(agrAnimal_2_sf, 3301), st_transform(municip, 3301), join = st_intersects)
+
+st_geometry(agrAnimal_2_sf_municip) <- NULL
+agrAnimal_2_sf_municip_aggr <- agrAnimal_2_sf_municip %>% 
+  group_by(OKOOD, key) %>% 
+  summarise(sum = sum(value)) %>% 
+  ungroup()
+agrAnimal_2_sf_municip_aggr <- agrAnimal_2_sf_municip_aggr %>% 
+  spread(key, sum)
+
+agrAnimal_2_sf_municip_aggr <- left_join(municip, agrAnimal_2_sf_municip_aggr, by="OKOOD")
+
+```
+
+## Pigs distribution in municiaplaities
+
+```{r}
+ggplot()+
+  theme_grey(base_size=8.5)+
+  theme(plot.title = element_text(size = 13,face="bold"))+
+  geom_sf(data = agrAnimal_2_sf_municip_aggr, aes(fill=pigs), size=0.25, colour = "grey70")+
+  scale_fill_gradientn(colours = c("#B0B579","#5E623F"), na.value = "#B6D3C1")+
+  labs(fill = "N", 
+       title = "Pigs in Estonian Municipalities",
+       subtitle = "Agricultural Registers and Information Board",
+       caption = "Author: D.kajaia")
+```
+
+
+## Density
+
+```{r}
+agrAnimal_2_sf_municip_aggr$area <- st_area(agrAnimal_2_sf_municip_aggr)
+agrAnimal_2_sf_municip_aggr <- agrAnimal_2_sf_municip_aggr %>% 
+  mutate(area = as.numeric(area) / 1000000) 
+```
+
+
+```{r}
+ggplot()+
+  theme_grey(base_size=8.5)+
+  theme(plot.title = element_text(size = 13,face="bold"))+
+  geom_sf(data = agrAnimal_2_sf_municip_aggr, aes(fill = pigs/ area), size=0.25, colour = "grey70")+
+  scale_fill_gradientn(colours = c("#B0B579","#5E623F"), na.value = "#B6D3C1")+
+  labs(fill = "N per km2", 
+       title = "Pigs Density in Estonian Municipalities",
+       subtitle = "Agricultural Registers and Information Board",
+       caption = "Author: D. Kajaia")+
+   annotation_scale(location = "bl", style = "ticks") +
+   annotation_north_arrow(location = "tr", width = unit(0.5, "cm"))
+```
+
+## Finding municipality
+
+```{r}
+agrAnimal_2_sf_municip_aggr%>%
+  filter(pigs==max(pigs,na.rm=TRUE))%>%
+  select(ONIMI,OKOOD,pigs)
+```
+```{r}
+agrAnimal_2_sf_municip_aggr%>%
+  mutate(density=pigs/area)%>%
+  filter(density==max(pigs/area,na.rm=TRUE))%>%
+  select(ONIMI,OKOOD,density)
+```
+
+
+>Both -- the number and the density of pigs are highest in **Viljandi**. 
+

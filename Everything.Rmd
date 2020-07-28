@@ -1,0 +1,13 @@
+---
+title: "Geospatial Analysis"
+author: "Davit Kajaia"
+output:
+  html_document:
+    toc: yes
+    toc_float: true
+    number_sections: true
+---
+
+
+```{r, child=c('Part1.Rmd','Part2.Rmd','Part3.Rmd','Part4.Rmd','Part5.Rmd','Part6.Rmd','Part7.Rmd')}
+```
